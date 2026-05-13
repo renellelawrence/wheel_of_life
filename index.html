@@ -112,6 +112,14 @@
 
   <div id="root"></div>
 
+  <script>
+    // Buffer ink:init (and any other) messages that arrive before React mounts.
+    // The parent posts ink:init on iframe load — earlier than React's useEffect runs.
+    window.__inkPending = [];
+    window.__inkHandler = (e) => window.__inkPending.push(e);
+    window.addEventListener("message", window.__inkHandler);
+  </script>
+
   <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
@@ -339,9 +347,10 @@
       const [submitted, setSubmitted] = React.useState(false);
       const submittedRef = React.useRef(false);
 
-      // Listen for ink:init — attached early, before DOMContentLoaded fires the parent's post.
+      // Listen for ink:init — drain any messages buffered before React mounted,
+      // then take over as the real listener.
       React.useEffect(() => {
-        const onMessage = (e) => {
+        const apply = (e) => {
           if (!e.data || e.data.type !== "ink:init") return;
           const vars = e.data.variables || {};
           setScores({
@@ -355,8 +364,16 @@
             environment:   clampScore(vars.environment),
           });
         };
-        window.addEventListener("message", onMessage);
-        return () => window.removeEventListener("message", onMessage);
+        // Drain anything that arrived before React mounted
+        (window.__inkPending || []).forEach(apply);
+        window.__inkPending = [];
+        // Swap the buffering listener for the real one
+        if (window.__inkHandler) {
+          window.removeEventListener("message", window.__inkHandler);
+          window.__inkHandler = null;
+        }
+        window.addEventListener("message", apply);
+        return () => window.removeEventListener("message", apply);
       }, []);
 
       const set = (id, v) => setScores((s) => ({ ...s, [id]: v }));
