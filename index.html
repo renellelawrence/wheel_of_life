@@ -26,16 +26,11 @@
       radial-gradient(ellipse 60% 40% at 50% 110%, rgba(31,51,40,0.6), transparent 60%),
       var(--bg);
   }
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 56px 32px 80px; }
-  .header { text-align: center; margin-bottom: 48px; }
-  .eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); margin-bottom: 16px; }
-  h1 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 56px; line-height: 1.05; letter-spacing: -0.025em; margin: 0 0 18px; font-variation-settings: 'opsz' 144; }
-  .subtitle { font-family: 'Fraunces', serif; font-style: italic; font-size: 20px; color: rgba(242,237,228,0.7); margin: 0; max-width: 600px; margin-inline: auto; line-height: 1.45; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 32px 48px; }
 
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 56px; align-items: start; }
   @media (max-width: 880px) {
     .layout { grid-template-columns: 1fr; gap: 40px; }
-    h1 { font-size: 40px; }
   }
 
   .controls { display: flex; flex-direction: column; gap: 18px; padding: 28px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
@@ -146,7 +141,7 @@
       { id: "environment",   short: "HOME",     full: "Environment",       angle: 315 }
     ];
 
-    const DEFAULTS = { career: 7, finances: 5, health: 4, relationships: 8, romance: 3, growth: 6, fun: 3, environment: 5 };
+    const BLANK = { career: null, finances: null, health: null, relationships: null, romance: null, growth: null, fun: null, environment: null };
 
     function InteractiveWheel({ scores }) {
       const [hovered, setHovered] = React.useState(null);
@@ -338,15 +333,15 @@
       );
     }
 
-    // Clamp incoming variable to an integer in [1, 10]; fall back if missing/invalid.
-    const clampScore = (v, fallback) => {
+    // Clamp incoming variable to an integer in [1, 10]. Returns null for missing/invalid values.
+    const clampScore = (v) => {
       const n = Number(v);
-      if (!Number.isFinite(n)) return fallback;
+      if (!Number.isFinite(n)) return null;
       return Math.max(1, Math.min(10, Math.round(n)));
     };
 
     function App() {
-      const [scores, setScores] = React.useState(DEFAULTS);
+      const [scores, setScores] = React.useState(BLANK);
       const [submitted, setSubmitted] = React.useState(false);
       const submittedRef = React.useRef(false);
 
@@ -355,16 +350,16 @@
         const onMessage = (e) => {
           if (!e.data || e.data.type !== "ink:init") return;
           const vars = e.data.variables || {};
-          setScores((prev) => ({
-            career:        clampScore(vars.career,        prev.career),
-            finances:      clampScore(vars.finances,      prev.finances),
-            health:        clampScore(vars.health,        prev.health),
-            relationships: clampScore(vars.relationships, prev.relationships),
-            romance:       clampScore(vars.romance,       prev.romance),
-            growth:        clampScore(vars.growth,        prev.growth),
-            fun:           clampScore(vars.fun,           prev.fun),
-            environment:   clampScore(vars.environment,   prev.environment),
-          }));
+          setScores({
+            career:        clampScore(vars.career),
+            finances:      clampScore(vars.finances),
+            health:        clampScore(vars.health),
+            relationships: clampScore(vars.relationships),
+            romance:       clampScore(vars.romance),
+            growth:        clampScore(vars.growth),
+            fun:           clampScore(vars.fun),
+            environment:   clampScore(vars.environment),
+          });
         };
         window.addEventListener("message", onMessage);
         return () => window.removeEventListener("message", onMessage);
@@ -372,8 +367,11 @@
 
       const set = (id, v) => setScores((s) => ({ ...s, [id]: v }));
 
+      const allScored = Object.values(scores).every((v) => v != null);
+
       const handleSubmit = () => {
         if (submittedRef.current) return;
+        if (!allScored) return;
         submittedRef.current = true;
         setSubmitted(true);
 
@@ -393,12 +391,6 @@
 
       return (
         <div className="wrap">
-          <div className="header">
-            <div className="eyebrow">Wheel of Life</div>
-            <h1>Reading the wheel</h1>
-            <p className="subtitle">Drag the sliders to set a score for each area. Hover any slice on the wheel to see its name and value.</p>
-          </div>
-
           <div className="layout">
             <InteractiveWheel scores={scores} />
             <div className="controls">
@@ -407,15 +399,15 @@
                 <div key={a.id} className="slider-row">
                   <div className="slider-label">{a.full}</div>
                   <input type="range" min="1" max="10" step="1"
-                    value={scores[a.id]}
+                    value={scores[a.id] ?? 1}
                     onChange={(e) => set(a.id, Number(e.target.value))}
                     disabled={submitted}
-                    style={{ accentColor: PALETTE.accent }} />
-                  <div className="slider-value">{scores[a.id]}</div>
+                    style={{ accentColor: PALETTE.accent, opacity: scores[a.id] == null ? 0.4 : 1 }} />
+                  <div className="slider-value">{scores[a.id] ?? "—"}</div>
                 </div>
               ))}
-              <button className="reset" onClick={() => setScores(DEFAULTS)} disabled={submitted}>Reset</button>
-              <button className="submit" onClick={handleSubmit} disabled={submitted}>
+              <button className="reset" onClick={() => setScores(BLANK)} disabled={submitted}>Reset</button>
+              <button className="submit" onClick={handleSubmit} disabled={submitted || !allScored}>
                 {submitted ? "Submitted" : "Save & continue"}
               </button>
               {submitted && <div className="submit-note">Your scores are saved.</div>}
